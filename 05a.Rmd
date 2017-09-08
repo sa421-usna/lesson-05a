@@ -1,0 +1,229 @@
+---
+title: "Lesson 5a. Presenting Output Data Analysis"
+author: "Assoc. Prof. D. Phillips and N. Uhan"
+date: "SA421 -- Simulation Modeling -- Fall 2017"
+output: 
+  html_notebook: 
+    css: css/sa421.css
+---
+
+# Setting up your R Markdown file
+
+* You can start with a fresh R Markdown template by selecting __File > New
+  File > R Notebook__ in RStudio, or you can modify an existing Rmd file
+
+* Use this as a starting point for your header:
+
+```
+---
+title: Insert Descriptive Title Here
+author: Your Name
+date: SA421 -- Simulation Modeling -- Fall 2017
+output: html_notebook
+---
+```
+
+* The last line will ensure that RStudio gives you the option to preview your
+  work
+
+# Running your JaamSim file from R
+
+* To run your JaamSim file directly from your R Markdown file, you can use 
+  the `system()` function, like this:
+
+```
+system('java -jar "Location of JaamSim .jar file" "Location of JaamSim .cfg file" -b')
+```
+
+* The `-b` flag tells JaamSim to run the file immediately, without the
+  graphical interface
+
+* `05.cfg` in this folder contains the same JaamSim file we used in Lesson 5
+
+* To run this file directly from this R Markdown file, I would write (on my computer):
+
+```{r}
+system('java -jar "/Applications/jaamsim/JaamSim2017-09.jar" "05.cfg" -b')
+```
+
+* This JaamSim file is configured to write output to `05.dat`. Recall in
+  Lesson 5 that we read in this output data as follows:
+
+```{r}
+# Read output from simulation
+output <- read.table("05.dat", sep="\t", skip=2, 
+                     col.names=c("number.of.baristas", "run", "avg.delay"))
+```
+
+# Tables with kable
+
+* Like we did in Lesson 5, let's create a data frame containing the summary
+  statistics we want:
+
+    - observed sample mean of average delay
+    
+    - length of 95% confidence intervals
+
+```{r}
+# Load dplyr
+library(dplyr)
+
+# Group JaamSim output data by number of baristas
+# Get sample mean and 95% CI length for each group
+# Put into a separate data frame so we can access it later
+summary.avg.delay <- output %>%
+  group_by(number.of.baristas) %>%
+  summarise(sample.mean = mean(avg.delay), ci.length.95 = 2*1.96*sd(avg.delay)/sqrt(n()))
+
+# Show the summary data frame 
+summary.avg.delay
+```
+
+* This data frame contains the information we want, but is not
+  publication-worthy: the column headings should be in plain English, not R
+  variable names
+    
+* We can convert this data frame to a proper table using __kable__, which is a
+  part of the knitr library:
+
+```{r}
+# Load knitr
+library(knitr)
+
+# Convert summary data frame into a proper table
+kable(summary.avg.delay,
+      col.names=c("Number of baristas", "Sample mean", "95% CI Length"))
+```
+
+* Alternatively, we can chain the sample mean and CI computation with
+  `kable()` like this:
+
+```{r}
+output %>%
+  group_by(number.of.baristas) %>%
+  summarise(sample.mean = mean(avg.delay), ci.length.95 = 2*1.96*sd(avg.delay)/sqrt(n())) %>%
+  kable(col.names=c("Number of baristas", "Sample mean", "95% CI Length"))
+```
+
+
+# Plots with ggplot2
+
+* What if we want to describe these results visually?
+
+* Let's plot the observed sample mean of the average delay and the
+  corresponding confidence interval ranges using __ggplot2__
+
+* ggplot2 is a system in R for creating graphics
+
+    - [Homepage](http://ggplot2.tidyverse.org/index.html) and [documentation](http://ggplot2.tidyverse.org/reference/) for ggplot2
+
+* Roughly speaking, building a plot with ggplot2 looks like this:
+
+```
+data +
+    geometry to represent the data (e.g. point plot? bar graph?)  
+        with mapping of data to geometry properties 
+        (e.g. x-coordinates, y-coordinates, shapes and colors) + 
+    scaling of ranges (e.g. regular? log?) + 
+    axis labels and title
+```
+
+* For example, a simple point plot of the mean average delay:
+
+```{r}
+# Load ggplot2
+library(ggplot2)
+
+# An example of a point plot in ggplot2
+ggplot(summary.avg.delay) +                       # Which data?
+  geom_point(aes(x = number.of.baristas,          # What kind of plot? 
+                 y = sample.mean)) +              #   How does the data map to the plot? 
+  xlab("Number of baristas") +                    # x-axis label
+  ylab("Observed sample mean of average delay") + # y-axis label
+  ggtitle("Average Delay at the Barista Queue")   # title label
+```
+
+* Maybe this would look better as a bar graph? 
+
+    - `stat = "identity"` tells `geom_bar()` to use the y values as the height
+      of the bars
+
+```{r}
+# An example of a bar graph in ggplot2
+ggplot(summary.avg.delay) +
+  geom_bar(aes(x = number.of.baristas, 
+               y = sample.mean), 
+           stat = "identity") +                   
+  xlab("Number of baristas") + 
+  ylab("Observed sample mean of average delay") + 
+  ggtitle("Average Delay at the Barista Queue")
+```
+
+* Or maybe... we should have points showing the sample means, along with error
+  bars showing the confidence interval ranges?
+    
+    - It would also be nice to revise the y-axis scale as well, so some of the 
+      differences in values are easier to see
+
+    - `scale_y_sqrt()` stretches the scale on the y-axis at smaller values
+
+    - Instead of `xlab()`, `ylab()` and `ggtitle()`, you can also use `labs()`
+      to specify the axis labels and title
+    
+    - You can also specify a caption and subtitle with `labs()`
+
+```{r}
+# An example of a point plot with error bars in ggplot2
+ggplot(summary.avg.delay) +
+  geom_point(aes(x = number.of.baristas, 
+                 y = sample.mean), 
+             stat = "identity") + 
+  geom_errorbar(aes(x = number.of.baristas, 
+                    ymin = sample.mean - ci.length.95/2, 
+                    ymax = sample.mean + ci.length.95/2)) +
+  scale_y_sqrt() +
+  labs(x = "Number of baristas",
+       y = "Observed sample mean of average delay",
+       title = "Average Delay at the Barista Queue", 
+       caption = "The error bars correspond to 95% confidence intervals.")
+```
+
+# Some tips on presenting your output data analysis
+
+* When presenting your output data analysis, __your goal is to accurately 
+  describe the output data, not make decisions or judgements based on the data__
+
+* Present the numerical values of your output data analysis using tables or
+  graphs (or both)
+
+* Give your tables descriptive column headings
+
+* Label the axes of your graphs and give your graphs descriptive titles
+
+* __Accompany your tables and graphs with words:__
+
+    - Introduce each table or graph, e.g.,
+    
+        > The graph below shows the average delay predicted by our simulation
+        > for different numbers of baristas working in the cafe.
+
+    - Describe each table or graph, but __do not__ simply repeat the numerical 
+      values in your tables and graphs
+    
+    - Instead, point your reader to important trends while referring to your
+      tables or graphs, e.g.,
+    
+        > As we can see in the table above, as the number of baristas goes up,
+        > the observed sample mean of the average delay goes up as well.
+    
+    - You may also want to point out the approximate magnitude in changes, if
+      applicable, e.g.,
+    
+        > Each additional barista results in an approximately 200% increase in
+        > the predicted average delay.
+        
+* In the case of the NCB problem, the observed sample mean of the average
+  delay is your simulation study's _prediction_ of the mean average delay
+      
+      - So an appropriate synonym for "observed sample mean of the average 
+        delay" would be "predicted mean average delay."
